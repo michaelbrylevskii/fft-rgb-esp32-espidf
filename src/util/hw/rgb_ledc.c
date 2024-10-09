@@ -1,7 +1,8 @@
 #include "util/hw/rgb_ledc.h"
 
+#include <stdlib.h>
 #include <string.h>
-#include "util/error.h"
+#include "util/stopwatch.h" // TODO: remove it
 
 static rgb_ledc_config_t *_rgb_ledc_array[RGB_LED_MAX];
 
@@ -78,43 +79,31 @@ static rgb_ledc_config_t *_rgb_ledc_get_config_slot(rgb_ledc_led_t led)
     return local_config;
 }
 
+uint16_t _rgb_ledc_calc_duty(uint8_t color, const uint16_t duty_references[])
+{
+    uint8_t index = (color * RGB_LEDC_DUTY_REFERENCE_LAST) / 255;
+    uint8_t next_index = index + 1;
+    if (next_index > RGB_LEDC_DUTY_REFERENCE_LAST)
+        next_index = RGB_LEDC_DUTY_REFERENCE_LAST;
+
+    int16_t start_duty = duty_references[index];
+    int16_t end_duty = duty_references[next_index];
+    int16_t fraction = ((color * RGB_LEDC_DUTY_REFERENCE_LAST) % 255) * 1000 / 255;
+
+    return start_duty + ((end_duty - start_duty) * fraction / 1000);
+}
+
 static void _rgb_ledc_update_duty(const rgb_ledc_config_t *config)
 {
     rgb_t color = config->color;
     uint8_t brightness = config->brightness; // TODO: use this
 
-    uint32_t duty_r;
-    uint32_t duty_g;
-    uint32_t duty_b;
-
-    if (config->scale == LINEAR)
-    {
-        if (config->duty_resolution == LEDC_TIMER_8_BIT)
-        {
-            duty_r = color.r;
-            duty_g = color.g;
-            duty_b = color.b;
-        }
-        else if (config->duty_resolution > LEDC_TIMER_8_BIT)
-        {
-            uint8_t shift = config->duty_resolution - LEDC_TIMER_8_BIT;
-            duty_r = color.r << shift;
-            duty_g = color.g << shift;
-            duty_b = color.b << shift;
-        }
-        else
-        {
-            uint8_t shift = LEDC_TIMER_8_BIT - config->duty_resolution;
-            duty_r = color.r >> shift;
-            duty_g = color.g >> shift;
-            duty_b = color.b >> shift;
-        }
-    }
-    else
-    {
-        ERROR_NOT_SUPPORTED;
-        return;
-    }
+    STOPWATCH_START;
+    uint16_t duty_r = _rgb_ledc_calc_duty(color.r, config->duty_references);
+    uint16_t duty_g = _rgb_ledc_calc_duty(color.g, config->duty_references);
+    uint16_t duty_b = _rgb_ledc_calc_duty(color.b, config->duty_references);
+    STOPWATCH_STOP;
+    STOPWATCH_PRINT(10000, "_rgb_ledc_calc_duty");
 
     ERROR(ledc_set_duty(config->speed_mode, config->channel_r, duty_r));
     ERROR(ledc_set_duty(config->speed_mode, config->channel_g, duty_g));
@@ -126,6 +115,12 @@ static void _rgb_ledc_update_duty(const rgb_ledc_config_t *config)
 
 void rgb_ledc_config(const rgb_ledc_config_t *config)
 {
+    if (config->duty_resolution > LEDC_TIMER_12_BIT)
+    {
+        ERROR_NOT_SUPPORTED;
+        return;
+    }
+
     rgb_ledc_config_t *local_config = _rgb_ledc_init_config_slot(config);
     _rgb_ledc_config_ledc(local_config);
     _rgb_ledc_update_duty(local_config);

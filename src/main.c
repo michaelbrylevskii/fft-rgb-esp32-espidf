@@ -6,6 +6,7 @@
 
 #include "config.h"
 #include "util/error.h"
+#include "util/color.h"
 #include "util/hw/rgb_ledc.h"
 
 void init_rgb_led()
@@ -19,12 +20,15 @@ void init_rgb_led()
         .gpio_r = LED_R_GPIO,
         .gpio_g = LED_G_GPIO,
         .gpio_b = LED_B_GPIO,
+        .freq_hz = 2900,
         .speed_mode = LEDC_HIGH_SPEED_MODE,
         .duty_resolution = LEDC_TIMER_10_BIT,
-        .freq_hz = 2900,
-        .scale = LINEAR,
+        // .duty_references = {0, 127, 255, 383, 511, 639, 767, 895, 1023},
+        // .duty_references = {1023, 895, 767, 639, 511, 383, 255, 127, 0},
+        // .duty_references = {0, 255, 512, 1023, 0, 255, 512, 1023},
+        .duty_references = {0, 20, 82, 167, 331, 521, 748, 1023},
         .brightness = 255,
-        .color = (rgb_t){{0, 128, 0}},
+        .color = {.r = 0, .g = 128, .b = 0},
     };
     rgb_ledc_config(&rgb_ledc);
 }
@@ -53,7 +57,7 @@ void app_main(void)
     // printf("1 << 3 = %u\n", 1u << 3);
     // printf("1 << 4 = %u\n", 1u << 4);
 
-    rgb_t color = {{0, 0, 0}};
+    rgb_t color = {.r = 0, .g = 0, .b = 0};
     int16_t step = 5;
 
     while (true)

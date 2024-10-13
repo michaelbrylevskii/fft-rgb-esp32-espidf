@@ -8,10 +8,10 @@
 #include "util/error.h"
 #include "util/color.h"
 
-#ifndef RGB_LEDC_DUTY_REFERENCES_COUNT
-#define RGB_LEDC_DUTY_REFERENCES_COUNT 8
+#ifndef RGB_LEDC_DUTY_REFERENCES_SIZE
+#define RGB_LEDC_DUTY_REFERENCES_SIZE 8
 #endif
-#define RGB_LEDC_DUTY_REFERENCE_LAST (RGB_LEDC_DUTY_REFERENCES_COUNT - 1)
+#define RGB_LEDC_DUTY_REFERENCE_LAST_IDX (RGB_LEDC_DUTY_REFERENCES_SIZE - 1)
 
 typedef enum
 {
@@ -34,7 +34,7 @@ typedef struct
     uint16_t freq_hz;
     ledc_mode_t speed_mode;
     ledc_timer_bit_t duty_resolution;
-    uint16_t duty_references[RGB_LEDC_DUTY_REFERENCES_COUNT];
+    uint16_t duty_references[RGB_LEDC_DUTY_REFERENCES_SIZE];
     uint8_t brightness;
     rgb_t color;
 } rgb_ledc_config_t;
@@ -48,3 +48,5 @@ void rgb_ledc_set_brightness(rgb_ledc_led_t led, uint8_t brightness);
 rgb_t rgb_ledc_get_color(rgb_ledc_led_t led);
 
 void rgb_ledc_set_color(rgb_ledc_led_t led, rgb_t color);
+
+void rgb_ledc_set_color_and_brightness(rgb_ledc_led_t led, rgb_t color, uint8_t brightness);

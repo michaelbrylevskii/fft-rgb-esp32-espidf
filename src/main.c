@@ -3,11 +3,17 @@
 #include "freertos/FreeRTOS.h"
 #include "driver/gpio.h"
 #include "driver/ledc.h"
+#include "esp_random.h"
 
 #include "config.h"
 #include "util/error.h"
 #include "util/color.h"
 #include "util/hw/rgb_ledc.h"
+
+void delay_ms(uint16_t ms)
+{
+    vTaskDelay(ms / portTICK_PERIOD_MS);
+}
 
 void init_rgb_led()
 {
@@ -20,15 +26,15 @@ void init_rgb_led()
         .gpio_r = LED_R_GPIO,
         .gpio_g = LED_G_GPIO,
         .gpio_b = LED_B_GPIO,
-        .freq_hz = 2900,
+        .freq_hz = 2000,
         .speed_mode = LEDC_HIGH_SPEED_MODE,
-        .duty_resolution = LEDC_TIMER_10_BIT,
-        // .duty_references = {0, 127, 255, 383, 511, 639, 767, 895, 1023},
-        // .duty_references = {1023, 895, 767, 639, 511, 383, 255, 127, 0},
-        // .duty_references = {0, 255, 512, 1023, 0, 255, 512, 1023},
-        .duty_references = {0, 20, 82, 167, 331, 521, 748, 1023},
+        .duty_resolution = LEDC_TIMER_12_BIT,
+        // .duty_references = {0, 255, 512, 1023, 0, 255, 512, 1023}, // 10 bit test
+        // .duty_references = {0, 20, 82, 167, 331, 521, 748, 1023},  // 10 bit pow2
+        .duty_references = {0, 80, 329, 668, 1324, 2048, 2992, 4095}, // 12 bit pow2
+        // .duty_references = {0, 585, 1170, 1755, 2340, 2925, 3510, 4095}, // 12 bit linear
         .brightness = 255,
-        .color = {.r = 0, .g = 128, .b = 0},
+        .color = {.r = 0, .g = 0, .b = 0},
     };
     rgb_ledc_config(&rgb_ledc);
 }
@@ -42,21 +48,8 @@ void init()
     printf("Initialization completed!\n");
 }
 
-void delay_ms(uint16_t ms)
+void make_rainbow()
 {
-    vTaskDelay(ms / portTICK_PERIOD_MS);
-}
-
-void app_main(void)
-{
-    init();
-
-    // printf("1 << 0 = %u\n", 1u << 0);
-    // printf("1 << 1 = %u\n", 1u << 1);
-    // printf("1 << 2 = %u\n", 1u << 2);
-    // printf("1 << 3 = %u\n", 1u << 3);
-    // printf("1 << 4 = %u\n", 1u << 4);
-
     rgb_t color = {.r = 0, .g = 0, .b = 0};
     int16_t step = 5;
 
@@ -76,7 +69,70 @@ void app_main(void)
             color.r += step;
 
         rgb_ledc_set_color(RGB_LED_0, color);
-        delay_ms(10);
-        // rgb_ledc_get_color(RGB_LED_1);
+        delay_ms(20);
     }
+}
+
+void make_brightness_test()
+{
+    rgb_t color = {.r = 0, .g = 0, .b = 0};
+    rgb_t rnd = {.r = 0, .g = 0, .b = 0};
+    uint8_t brightness = 0;
+    uint8_t stage = 0;
+
+    rgb_ledc_set_color(RGB_LED_0, color);
+    rgb_ledc_set_brightness(RGB_LED_0, brightness);
+
+    while (true)
+    {
+        if (stage == 0)
+        {
+            esp_fill_random(&color, sizeof(color));
+            esp_fill_random(&rnd, sizeof(rnd));
+            brightness = 0;
+
+            if (rnd.r < 30)
+                color.r = 0;
+            if (rnd.g < 30)
+                color.g = 0;
+            if (rnd.b < 30)
+                color.b = 0;
+
+            if (rnd.r > 255 - 30)
+                color.r = 255;
+            if (rnd.g > 255 - 30)
+                color.g = 255;
+            if (rnd.b > 255 - 30)
+                color.b = 255;
+
+            printf("Color: #%x%x%x\n", color.r, color.g, color.b);
+            stage++;
+        }
+        else if (stage == 1)
+        {
+            brightness++;
+            if (brightness == 255)
+                stage++;
+        }
+        else if (stage == 2)
+        {
+            brightness--;
+            if (brightness == 0)
+                stage++;
+        }
+        else
+        {
+            stage = 0;
+        }
+
+        rgb_ledc_set_color_and_brightness(RGB_LED_0, color, brightness);
+        delay_ms(20);
+    }
+}
+
+void app_main(void)
+{
+    init();
+
+    make_brightness_test();
 }

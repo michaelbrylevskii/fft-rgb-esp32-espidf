@@ -2,7 +2,8 @@
 
 #include <stdlib.h>
 #include <string.h>
-#include "util/stopwatch.h" // TODO: remove it
+
+#define MAX_OF_8BIT_X_8BIT (255 * 255)
 
 static rgb_ledc_config_t *_rgb_ledc_array[RGB_LED_MAX];
 
@@ -79,31 +80,26 @@ static rgb_ledc_config_t *_rgb_ledc_get_config_slot(rgb_ledc_led_t led)
     return local_config;
 }
 
-uint16_t _rgb_ledc_calc_duty(uint8_t color, const uint16_t duty_references[])
+static uint16_t _rgb_ledc_calc_duty(uint8_t color, uint8_t brightness, const uint16_t duty_references[])
 {
-    uint8_t index = (color * RGB_LEDC_DUTY_REFERENCE_LAST) / 255;
-    uint8_t next_index = index + 1;
-    if (next_index > RGB_LEDC_DUTY_REFERENCE_LAST)
-        next_index = RGB_LEDC_DUTY_REFERENCE_LAST;
+    uint8_t ref_idx = color * brightness * RGB_LEDC_DUTY_REFERENCE_LAST_IDX / MAX_OF_8BIT_X_8BIT;
+    uint8_t next_ref_idx = ref_idx >= RGB_LEDC_DUTY_REFERENCE_LAST_IDX ? RGB_LEDC_DUTY_REFERENCE_LAST_IDX : ref_idx + 1;
 
-    int16_t start_duty = duty_references[index];
-    int16_t end_duty = duty_references[next_index];
-    int16_t fraction = ((color * RGB_LEDC_DUTY_REFERENCE_LAST) % 255) * 1000 / 255;
+    int16_t start_duty = duty_references[ref_idx];
+    int16_t end_duty = duty_references[next_ref_idx];
+    int32_t remainder = color * brightness * RGB_LEDC_DUTY_REFERENCE_LAST_IDX % MAX_OF_8BIT_X_8BIT;
 
-    return start_duty + ((end_duty - start_duty) * fraction / 1000);
+    return start_duty + ((end_duty - start_duty) * remainder / MAX_OF_8BIT_X_8BIT);
 }
 
 static void _rgb_ledc_update_duty(const rgb_ledc_config_t *config)
 {
     rgb_t color = config->color;
-    uint8_t brightness = config->brightness; // TODO: use this
+    uint8_t brightness = config->brightness;
 
-    STOPWATCH_START;
-    uint16_t duty_r = _rgb_ledc_calc_duty(color.r, config->duty_references);
-    uint16_t duty_g = _rgb_ledc_calc_duty(color.g, config->duty_references);
-    uint16_t duty_b = _rgb_ledc_calc_duty(color.b, config->duty_references);
-    STOPWATCH_STOP;
-    STOPWATCH_PRINT(10000, "_rgb_ledc_calc_duty");
+    uint16_t duty_r = _rgb_ledc_calc_duty(color.r, brightness, config->duty_references);
+    uint16_t duty_g = _rgb_ledc_calc_duty(color.g, brightness, config->duty_references);
+    uint16_t duty_b = _rgb_ledc_calc_duty(color.b, brightness, config->duty_references);
 
     ERROR(ledc_set_duty(config->speed_mode, config->channel_r, duty_r));
     ERROR(ledc_set_duty(config->speed_mode, config->channel_g, duty_g));
@@ -149,5 +145,13 @@ void rgb_ledc_set_color(rgb_ledc_led_t led, rgb_t color)
 {
     rgb_ledc_config_t *local_config = _rgb_ledc_get_config_slot(led);
     local_config->color = color;
+    _rgb_ledc_update_duty(local_config);
+}
+
+void rgb_ledc_set_color_and_brightness(rgb_ledc_led_t led, rgb_t color, uint8_t brightness)
+{
+    rgb_ledc_config_t *local_config = _rgb_ledc_get_config_slot(led);
+    local_config->color = color;
+    local_config->brightness = brightness;
     _rgb_ledc_update_duty(local_config);
 }

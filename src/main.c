@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <stdlib.h>
 
 #include "freertos/FreeRTOS.h"
 #include "driver/gpio.h"
@@ -31,8 +32,9 @@ void init_rgb_led()
         .duty_resolution = LEDC_TIMER_12_BIT,
         // .duty_references = {0, 255, 512, 1023, 0, 255, 512, 1023}, // 10 bit test
         // .duty_references = {0, 20, 82, 167, 331, 521, 748, 1023},  // 10 bit pow2
-        .duty_references = {0, 80, 329, 668, 1324, 2048, 2992, 4095}, // 12 bit pow2
         // .duty_references = {0, 585, 1170, 1755, 2340, 2925, 3510, 4095}, // 12 bit linear
+        .duty_references = {0, 80, 329, 668, 1324, 2048, 2992, 4095}, // 12 bit pow2
+        // .duty_references = {4095, 2992, 2048, 1324, 668, 329, 80, 0}, // 12 bit pow2 invert
         .brightness = 255,
         .color = {.r = 0, .g = 0, .b = 0},
     };
@@ -46,6 +48,15 @@ void init()
     init_rgb_led();
 
     printf("Initialization completed!\n");
+}
+
+int32_t sign(int32_t x)
+{
+    if (x > 0)
+        return 1;
+    if (x < 0)
+        return -1;
+    return 0;
 }
 
 void make_rainbow()
@@ -73,39 +84,21 @@ void make_rainbow()
     }
 }
 
-void make_brightness_test()
+void make_random_color_smooth_blinking()
 {
-    rgb_t color = {.r = 0, .g = 0, .b = 0};
-    rgb_t rnd = {.r = 0, .g = 0, .b = 0};
+    rgb_t color = {0};
     uint8_t brightness = 0;
     uint8_t stage = 0;
 
-    rgb_ledc_set_color(RGB_LED_0, color);
-    rgb_ledc_set_brightness(RGB_LED_0, brightness);
+    rgb_ledc_set_color_and_brightness(RGB_LED_0, color, brightness);
 
     while (true)
     {
         if (stage == 0)
         {
-            esp_fill_random(&color, sizeof(color));
-            esp_fill_random(&rnd, sizeof(rnd));
+            color = rnd_rgb();
             brightness = 0;
-
-            if (rnd.r < 30)
-                color.r = 0;
-            if (rnd.g < 30)
-                color.g = 0;
-            if (rnd.b < 30)
-                color.b = 0;
-
-            if (rnd.r > 255 - 30)
-                color.r = 255;
-            if (rnd.g > 255 - 30)
-                color.g = 255;
-            if (rnd.b > 255 - 30)
-                color.b = 255;
-
-            printf("Color: #%x%x%x\n", color.r, color.g, color.b);
+            printf("Color: #%02x%02x%02x\n", color.r, color.g, color.b);
             stage++;
         }
         else if (stage == 1)
@@ -126,7 +119,36 @@ void make_brightness_test()
         }
 
         rgb_ledc_set_color_and_brightness(RGB_LED_0, color, brightness);
-        delay_ms(20);
+        delay_ms(30);
+    }
+}
+
+void make_random_color_smooth_transition()
+{
+    rgb_t target_color = {0};
+    rgb_t current_color = {0};
+    rgbx_t diff = {0};
+    uint8_t brightness = 255;
+
+    rgb_ledc_set_color_and_brightness(RGB_LED_0, current_color, brightness);
+
+    while (true)
+    {
+        if (cmp_rgb(current_color, target_color) == 0)
+        {
+            target_color = rnd_colorful_rgb();
+            printf("Target color: #%02x%02x%02x\n", target_color.r, target_color.g, target_color.b);
+        }
+        else
+        {
+            diff = sub_rgb(target_color, current_color);
+            current_color.r += sign(diff.r);
+            current_color.g += sign(diff.g);
+            current_color.b += sign(diff.b);
+        }
+
+        rgb_ledc_set_color_and_brightness(RGB_LED_0, current_color, brightness);
+        delay_ms(30);
     }
 }
 
@@ -134,5 +156,6 @@ void app_main(void)
 {
     init();
 
-    make_brightness_test();
+    // make_random_color_smooth_blinking();
+    make_random_color_smooth_transition();
 }
